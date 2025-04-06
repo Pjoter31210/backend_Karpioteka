@@ -1,0 +1,44 @@
+# 📦 Node.js
+node_modules/
+uploads/
+posts/
+
+# 🔐 Pliki z sekretami
+.env
+.env.local
+.env.*.local
+
+# 🪵 Logi
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 🛠️ Systemowe śmieci
+.DS_Store
+Thumbs.db
+
+# 💻 IDE
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# 💾 Bazy lokalne
+*.sqlite
+*.sqlite3
+
+# 🔧 Produkcyjne buildy (jeśli generujesz)
+dist/
+build/
+
+# 📦 Zewnętrzne zależności (jeśli kopiujesz)
+*.tgz
+
+# 🗑️ Pliki tymczasowe
+*.tmp
+*.temp
+*.bak
