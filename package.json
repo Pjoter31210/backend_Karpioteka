@@ -1,6 +1,7 @@
 {
   "name": "karpioteka-backend",
   "version": "1.0.0",
+  "type": "module",
   "description": "Backend dla aplikacji Karpioteka",
   "main": "server.js",
   "scripts": {

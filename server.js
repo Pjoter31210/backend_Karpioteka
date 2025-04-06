@@ -16,7 +16,9 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-require('dotenv').config();
+import dotenv from 'dotenv';
+dotenv.config();
+
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
