@@ -8,15 +8,20 @@ import { v4 as uuidv4 } from 'uuid';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
 import jwt from 'jsonwebtoken';
+import mongoose from 'mongoose';  // Dodajemy Mongoose
+import dotenv from 'dotenv';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-import dotenv from 'dotenv';
-dotenv.config();
+// MongoDB URI (dodaj w .env)
+const MONGO_URI = process.env.MONGO_URI;
+
+mongoose.connect(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+  .then(() => console.log('Połączono z MongoDB'))
+  .catch((error) => console.error('Błąd połączenia z MongoDB:', error));
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -24,40 +29,21 @@ if (!JWT_SECRET) {
   throw new Error("JWT_SECRET nie jest ustawiony. Dodaj go do pliku .env!");
 }
 
-const usersPath = path.join(__dirname, 'users.json');
-let users;
-try {
-  const usersData = await fs.readFile(usersPath, 'utf-8');
-  users = JSON.parse(usersData);
-} catch (error) {
-  console.error('Błąd podczas wczytywania users.json:', error);
-  users = [];
-}
-
-const postsDir = path.join(__dirname, 'posts');
-const uploadsDir = path.join(__dirname, 'uploads');
-
-try {
-  await fs.mkdir(postsDir, { recursive: true });
-  console.log('Folder posts utworzony lub już istnieje:', postsDir);
-  await fs.mkdir(uploadsDir, { recursive: true });
-  console.log('Folder uploads utworzony lub już istnieje:', uploadsDir);
-} catch (error) {
-  console.error('Błąd podczas tworzenia folderów:', error);
-  process.exit(1);
-}
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadsDir);
-  },
-  filename: (req, file, cb) => {
-    const postId = uuidv4();
-    const extension = path.extname(file.originalname);
-    cb(null, `${postId}${extension}`);
-  },
+const usersSchema = new mongoose.Schema({
+  username: { type: String, required: true, unique: true },
+  password: { type: String, required: true },
 });
-const upload = multer({ storage });
+
+const User = mongoose.model('User', usersSchema); // Model dla użytkowników
+
+const postsSchema = new mongoose.Schema({
+  title: { type: String, required: true },
+  intro: { type: String, required: true },
+  content: { type: String, required: true },
+  image: { type: String, required: true }, // Path to image
+});
+
+const Post = mongoose.model('Post', postsSchema); // Model dla postów
 
 // Konfiguracja CORS
 app.use(cors({
@@ -66,11 +52,25 @@ app.use(cors({
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
-app.options('*', cors()); // Obsługa żądań preflight
+
+// Multer configuration
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = 'uploads';
+    cb(null, uploadDir);  // Zapisujemy pliki w folderze 'uploads'
+  },
+  filename: (req, file, cb) => {
+    const fileExtension = path.extname(file.originalname);
+    const filename = `${uuidv4()}${fileExtension}`;
+    cb(null, filename); // Generowanie unikalnej nazwy pliku
+  }
+});
+const upload = multer({ storage }); // Inicjalizacja multer
 
 app.use(bodyParser.json());
-app.use('/uploads', express.static(uploadsDir));
+app.use('/uploads', express.static('uploads'));
 
+// Middleware do autoryzacji
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -89,9 +89,10 @@ const authenticateToken = (req, res, next) => {
   }
 };
 
+// Logowanie użytkownika
 app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
-  const user = users.find((u) => u.username === username);
+  const user = await User.findOne({ username });
 
   if (!user) {
     return res.status(401).json({ message: 'Nieprawidłowy login lub hasło' });
@@ -106,6 +107,7 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
+// Dodawanie postu
 app.post('/api/posts', authenticateToken, upload.single('image'), async (req, res) => {
   const { title, intro, content } = req.body;
   const image = req.file;
@@ -115,39 +117,26 @@ app.post('/api/posts', authenticateToken, upload.single('image'), async (req, re
   }
 
   try {
-    const postId = uuidv4();
-    const postFileName = `${postId}.json`;
-    const postPath = path.join(postsDir, postFileName);
-
-    const newPost = {
-      id: postId,
+    const newPost = new Post({
       title,
       intro,
       content,
       image: `/uploads/${image.filename}`,
-    };
+    });
 
-    console.log('Zapisywanie postu:', postPath);
-    await fs.writeFile(postPath, JSON.stringify(newPost, null, 2));
+    await newPost.save();
 
     res.status(201).json({ message: 'Post dodany pomyślnie', post: newPost });
   } catch (error) {
     console.error('Błąd podczas dodawania postu:', error.message);
-    console.error('Szczegóły błędu:', error.stack);
     res.status(500).json({ message: 'Błąd podczas dodawania postu', error: error.message });
   }
 });
 
+// Pobieranie wszystkich postów
 app.get('/api/posts', async (req, res) => {
   try {
-    const files = await fs.readdir(postsDir);
-    const posts = await Promise.all(
-      files.map(async (file) => {
-        const filePath = path.join(postsDir, file);
-        const data = await fs.readFile(filePath, 'utf-8');
-        return JSON.parse(data);
-      })
-    );
+    const posts = await Post.find();
     res.status(200).json(posts);
   } catch (error) {
     console.error(error);
@@ -155,14 +144,16 @@ app.get('/api/posts', async (req, res) => {
   }
 });
 
+// Pobieranie pojedynczego postu
 app.get('/api/posts/:id', async (req, res) => {
   const { id } = req.params;
-  const postPath = path.join(postsDir, `${id}.json`);
-
   try {
-    const data = await fs.readFile(postPath, 'utf-8');
-    const post = JSON.parse(data);
-    res.status(200).json(post);
+    const post = await Post.findById(id);
+    if (post) {
+      res.status(200).json(post);
+    } else {
+      res.status(404).json({ message: 'Post nie znaleziony' });
+    }
   } catch (error) {
     console.error(error);
     res.status(404).json({ message: 'Post nie znaleziony' });
@@ -171,38 +162,4 @@ app.get('/api/posts/:id', async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Serwer działa na porcie ${PORT}`);
-});
-
-// Usuwanie postu – wymaga autoryzacji
-app.delete('/api/posts/:id', authenticateToken, async (req, res) => {
-  const { id } = req.params;
-  const postPath = path.join(postsDir, `${id}.json`);
-
-  try {
-    // Sprawdź, czy post istnieje
-    const postData = await fs.readFile(postPath, 'utf-8');
-    const post = JSON.parse(postData);
-
-    // Usuń plik postu
-    await fs.unlink(postPath);
-    console.log(`Post ${id} usunięty: ${postPath}`);
-
-    // Usuń powiązany obraz, jeśli istnieje
-    const imagePath = path.join(__dirname, post.image); // post.image zawiera ścieżkę, np. /uploads/<nazwa-pliku>
-    try {
-      await fs.unlink(imagePath);
-      console.log(`Obraz powiązany z postem ${id} usunięty: ${imagePath}`);
-    } catch (error) {
-      console.warn(`Nie udało się usunąć obrazu dla postu ${id}: ${error.message}`);
-    }
-
-    res.status(200).json({ message: 'Post usunięty pomyślnie' });
-  } catch (error) {
-    console.error('Błąd podczas usuwania postu:', error);
-    if (error.code === 'ENOENT') {
-      res.status(404).json({ message: 'Post nie znaleziony' });
-    } else {
-      res.status(500).json({ message: 'Błąd podczas usuwania postu', error: error.message });
-    }
-  }
 });
