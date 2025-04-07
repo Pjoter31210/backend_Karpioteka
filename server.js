@@ -19,7 +19,7 @@ const PORT = process.env.PORT || 5000;
 // MongoDB URI (dodaj w .env)
 const MONGO_URI = process.env.MONGO_URI;
 
-mongoose.connect(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
+mongoose.connect(MONGO_URI)
   .then(() => console.log('Połączono z MongoDB'))
   .catch((error) => console.error('Błąd połączenia z MongoDB:', error));
 
@@ -47,7 +47,7 @@ const Post = mongoose.model('Post', postsSchema); // Model dla postów
 
 // Konfiguracja CORS
 app.use(cors({
-  origin: 'https://karpioteka.pl',
+  origin: '*',  // Zmienione z 'https://karpioteka.pl' na '*', aby umożliwić dostęp z każdego źródła
   credentials: true,
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -92,24 +92,23 @@ const authenticateToken = (req, res, next) => {
 // Logowanie użytkownika
 app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
+  console.log(`Próba logowania dla użytkownika: ${username}`);
 
-  try {
-    const user = await User.findOne({ username });
-    if (!user) {
-      return res.status(401).json({ message: 'Nieprawidłowy login lub hasło' });
-    }
+  const user = await User.findOne({ username });
+  if (!user) {
+    console.log('Nie znaleziono użytkownika');
+    return res.status(401).json({ message: 'Nieprawidłowy login lub hasło' });
+  }
 
-    const match = await bcrypt.compare(password, user.password);
-    if (match) {
-      const token = jwt.sign({ username: user.username }, JWT_SECRET, { expiresIn: '1h' });
-      console.log('Response:', { message: 'Zalogowano pomyślnie', token });  // Logowanie odpowiedzi w backendzie
-      return res.status(200).json({ message: 'Zalogowano pomyślnie', token });
-    } else {
-      return res.status(401).json({ message: 'Nieprawidłowy login lub hasło' });
-    }
-  } catch (error) {
-    console.error('Błąd logowania:', error);
-    return res.status(500).json({ message: 'Błąd logowania', error: error.message });
+  const match = await bcrypt.compare(password, user.password);
+  if (match) {
+    console.log('Hasło poprawne. Tworzenie tokenu...');
+    const token = jwt.sign({ username: user.username }, JWT_SECRET, { expiresIn: '1h' });
+    console.log('Zalogowano pomyślnie, token utworzony');
+    return res.status(200).json({ message: 'Zalogowano pomyślnie', token });
+  } else {
+    console.log('Hasło niepoprawne');
+    return res.status(401).json({ message: 'Nieprawidłowy login lub hasło' });
   }
 });
 
@@ -119,6 +118,7 @@ app.post('/api/posts', authenticateToken, upload.single('image'), async (req, re
   const image = req.file;
 
   if (!title || !intro || !content || !image) {
+    console.log('Wszystkie pola są wymagane');
     return res.status(400).json({ message: 'Wszystkie pola są wymagane' });
   }
 
@@ -131,7 +131,7 @@ app.post('/api/posts', authenticateToken, upload.single('image'), async (req, re
     });
 
     await newPost.save();
-
+    console.log('Post dodany pomyślnie:', newPost);
     res.status(201).json({ message: 'Post dodany pomyślnie', post: newPost });
   } catch (error) {
     console.error('Błąd podczas dodawania postu:', error.message);
@@ -141,12 +141,14 @@ app.post('/api/posts', authenticateToken, upload.single('image'), async (req, re
 
 // Pobieranie wszystkich postów
 app.get('/api/posts', async (req, res) => {
+  console.log('Rozpoczęto pobieranie postów...');
   try {
     const posts = await Post.find();
+    console.log('Pobrano posty:', posts);  // Logowanie pobranych postów
     res.status(200).json(posts);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Błąd podczas pobierania postów' });
+    console.error('Błąd podczas pobierania postów:', error);  // Logowanie błędów
+    res.status(500).json({ message: 'Błąd podczas pobierania postów', error: error.message });
   }
 });
 
