@@ -69,9 +69,14 @@ const upload = multer({ storage });
 
 // Middleware
 app.use(cors({
-  origin: 'https://karpioteka.pl', // Adres Twojego frontendu
-  credentials: true
+  origin: 'https://karpioteka.pl',
+  credentials: true,
+  methods: ['GET', 'POST', 'OPTIONS'], // Dozwolone metody
+  allowedHeaders: ['Content-Type', 'Authorization'] // Dozwolone nagłówki
 }));
+
+// Obsługa żądań preflight (OPTIONS)
+app.options('*', cors());
 app.use(bodyParser.json());
 app.use('/uploads', express.static(uploadsDir));
 
