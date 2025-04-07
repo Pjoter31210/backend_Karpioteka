@@ -92,18 +92,24 @@ const authenticateToken = (req, res, next) => {
 // Logowanie użytkownika
 app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
-  const user = await User.findOne({ username });
 
-  if (!user) {
-    return res.status(401).json({ message: 'Nieprawidłowy login lub hasło' });
-  }
+  try {
+    const user = await User.findOne({ username });
+    if (!user) {
+      return res.status(401).json({ message: 'Nieprawidłowy login lub hasło' });
+    }
 
-  const match = await bcrypt.compare(password, user.password);
-  if (match) {
-    const token = jwt.sign({ username: user.username }, JWT_SECRET, { expiresIn: '1h' });
-    return res.status(200).json({ message: 'Zalogowano pomyślnie', token });
-  } else {
-    return res.status(401).json({ message: 'Nieprawidłowy login lub hasło' });
+    const match = await bcrypt.compare(password, user.password);
+    if (match) {
+      const token = jwt.sign({ username: user.username }, JWT_SECRET, { expiresIn: '1h' });
+      console.log('Response:', { message: 'Zalogowano pomyślnie', token });  // Logowanie odpowiedzi w backendzie
+      return res.status(200).json({ message: 'Zalogowano pomyślnie', token });
+    } else {
+      return res.status(401).json({ message: 'Nieprawidłowy login lub hasło' });
+    }
+  } catch (error) {
+    console.error('Błąd logowania:', error);
+    return res.status(500).json({ message: 'Błąd logowania', error: error.message });
   }
 });
 
