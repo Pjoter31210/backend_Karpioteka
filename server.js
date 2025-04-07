@@ -9,7 +9,6 @@ import { fileURLToPath } from 'url';
 import multer from 'multer';
 import jwt from 'jsonwebtoken';
 
-// Konfiguracja __dirname w ES Modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -19,16 +18,12 @@ const PORT = process.env.PORT || 5000;
 import dotenv from 'dotenv';
 dotenv.config();
 
-
 const JWT_SECRET = process.env.JWT_SECRET;
 
 if (!JWT_SECRET) {
   throw new Error("JWT_SECRET nie jest ustawiony. Dodaj go do pliku .env!");
 }
 
-
-
-// Wczytywanie użytkowników z pliku JSON
 const usersPath = path.join(__dirname, 'users.json');
 let users;
 try {
@@ -39,11 +34,9 @@ try {
   users = [];
 }
 
-// Foldery na posty i zdjęcia
 const postsDir = path.join(__dirname, 'posts');
 const uploadsDir = path.join(__dirname, 'uploads');
 
-// Utworzenie folderów, jeśli nie istnieją
 try {
   await fs.mkdir(postsDir, { recursive: true });
   console.log('Folder posts utworzony lub już istnieje:', postsDir);
@@ -54,7 +47,6 @@ try {
   process.exit(1);
 }
 
-// Konfiguracja multer do obsługi przesyłania plików
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, uploadsDir);
@@ -67,23 +59,21 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-// Middleware
+// Konfiguracja CORS
 app.use(cors({
   origin: 'https://karpioteka.pl',
   credentials: true,
-  methods: ['GET', 'POST', 'OPTIONS'], // Dozwolone metody
-  allowedHeaders: ['Content-Type', 'Authorization'] // Dozwolone nagłówki
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
+app.options('*', cors()); // Obsługa żądań preflight
 
-// Obsługa żądań preflight (OPTIONS)
-app.options('*', cors());
 app.use(bodyParser.json());
 app.use('/uploads', express.static(uploadsDir));
 
-// Middleware do weryfikacji tokenu JWT
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1]; // Format: "Bearer <token>"
+  const token = authHeader && authHeader.split(' ')[1];
 
   if (!token) {
     return res.status(401).json({ message: 'Brak tokenu, autoryzacja nieudana' });
@@ -91,7 +81,7 @@ const authenticateToken = (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = decoded; // Dodajemy dane użytkownika (np. username) do żądania
+    req.user = decoded;
     next();
   } catch (error) {
     console.error('Błąd weryfikacji tokenu:', error);
@@ -99,7 +89,6 @@ const authenticateToken = (req, res, next) => {
   }
 };
 
-// Logowanie admina – generowanie tokenu JWT
 app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
   const user = users.find((u) => u.username === username);
@@ -110,15 +99,13 @@ app.post('/api/login', async (req, res) => {
 
   const match = await bcrypt.compare(password, user.password);
   if (match) {
-    // Generowanie tokenu JWT
-    const token = jwt.sign({ username: user.username }, JWT_SECRET, { expiresIn: '1h' }); // Token ważny przez 1 godzinę
+    const token = jwt.sign({ username: user.username }, JWT_SECRET, { expiresIn: '1h' });
     return res.status(200).json({ message: 'Zalogowano pomyślnie', token });
   } else {
     return res.status(401).json({ message: 'Nieprawidłowy login lub hasło' });
   }
 });
 
-// Dodawanie nowego postu – wymaga autoryzacji
 app.post('/api/posts', authenticateToken, upload.single('image'), async (req, res) => {
   const { title, intro, content } = req.body;
   const image = req.file;
@@ -151,7 +138,6 @@ app.post('/api/posts', authenticateToken, upload.single('image'), async (req, re
   }
 });
 
-// Pobieranie listy postów – publiczne (opcjonalnie możesz dodać authenticateToken, jeśli chcesz ograniczyć dostęp)
 app.get('/api/posts', async (req, res) => {
   try {
     const files = await fs.readdir(postsDir);
@@ -169,7 +155,6 @@ app.get('/api/posts', async (req, res) => {
   }
 });
 
-// Pobieranie pojedynczego postu – publiczne (opcjonalnie możesz dodać authenticateToken)
 app.get('/api/posts/:id', async (req, res) => {
   const { id } = req.params;
   const postPath = path.join(postsDir, `${id}.json`);
@@ -184,7 +169,6 @@ app.get('/api/posts/:id', async (req, res) => {
   }
 });
 
-// Uruchomienie serwera
 app.listen(PORT, () => {
   console.log(`Serwer działa na porcie ${PORT}`);
 });
