@@ -172,3 +172,37 @@ app.get('/api/posts/:id', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`Serwer działa na porcie ${PORT}`);
 });
+
+// Usuwanie postu – wymaga autoryzacji
+app.delete('/api/posts/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const postPath = path.join(postsDir, `${id}.json`);
+
+  try {
+    // Sprawdź, czy post istnieje
+    const postData = await fs.readFile(postPath, 'utf-8');
+    const post = JSON.parse(postData);
+
+    // Usuń plik postu
+    await fs.unlink(postPath);
+    console.log(`Post ${id} usunięty: ${postPath}`);
+
+    // Usuń powiązany obraz, jeśli istnieje
+    const imagePath = path.join(__dirname, post.image); // post.image zawiera ścieżkę, np. /uploads/<nazwa-pliku>
+    try {
+      await fs.unlink(imagePath);
+      console.log(`Obraz powiązany z postem ${id} usunięty: ${imagePath}`);
+    } catch (error) {
+      console.warn(`Nie udało się usunąć obrazu dla postu ${id}: ${error.message}`);
+    }
+
+    res.status(200).json({ message: 'Post usunięty pomyślnie' });
+  } catch (error) {
+    console.error('Błąd podczas usuwania postu:', error);
+    if (error.code === 'ENOENT') {
+      res.status(404).json({ message: 'Post nie znaleziony' });
+    } else {
+      res.status(500).json({ message: 'Błąd podczas usuwania postu', error: error.message });
+    }
+  }
+});
